@@ -143,6 +143,9 @@ async function fetchWithTimeout(url: string, options: RequestInit = {}, timeout 
   } catch (error) {
     clearTimeout(timeoutId);
     if (error instanceof Error && error.name === 'AbortError') {
+      if (options.signal?.aborted) {
+        throw error;
+      }
       throw new Error('Request timed out. Please try again.');
     }
     throw error;
@@ -150,6 +153,7 @@ async function fetchWithTimeout(url: string, options: RequestInit = {}, timeout 
 }
 
 let activeFetchControllers: Record<string, AbortController> = {};
+const inflightLivePriceRequests = new Map<string, Promise<LivePriceResponse>>();
 
 export const stockService = {
   cancelActiveRequests: (requestKey?: string) => {
@@ -233,10 +237,15 @@ export const stockService = {
       if (cachedData) {
         return cachedData;
       }
+      
+      if (inflightLivePriceRequests.has(cleanSymbol)) {
+        return inflightLivePriceRequests.get(cleanSymbol)!;
+      }
     }
 
-    try {
-      const signal = stockService.getNewAbortSignal('livePrice');
+    const fetchPromise = (async () => {
+      try {
+        const signal = stockService.getNewAbortSignal(`livePrice_${cleanSymbol}`);
       const response = await fetchWithTimeout(`${BACKEND_BASE_URL}/live_price?symbol=${encodeURIComponent(cleanSymbol)}`, { signal });
 
       if (!response.ok) {
@@ -265,7 +274,13 @@ export const stockService = {
         }
       }
       throw new Error(`Unable to fetch live price for ${cleanSymbol}. Please try again later.`);
+    } finally {
+      inflightLivePriceRequests.delete(cleanSymbol);
     }
+    })();
+    
+    inflightLivePriceRequests.set(cleanSymbol, fetchPromise);
+    return fetchPromise;
   },
 
   // Get current stock data (converted from live price for compatibility)

@@ -63,37 +63,7 @@ export default function App() {
     }
   }, [chartPeriod, selectedSymbol]);
 
-  const loadStockData = async (symbol: string, forceRefresh: boolean = false) => {
-    setLoading(prev => ({ ...prev, stock: true }));
-    setErrors(prev => ({ ...prev, stock: '' }));
-    try {
-      // First, fetch stock info quickly (metadata)
-      try {
-        const stockInfo = await stockService.getStockInfo(symbol);
-        setStockInfoData(stockInfo);
-      } catch (error) {
-        console.warn('Failed to load stock info:', error);
-        // Continue without stock info - live price will provide fallback
-      }
 
-      // Then, fetch live price data (slower)
-      const livePrice = await stockService.getLivePrice(symbol, forceRefresh);
-      setLivePriceData(livePrice);
-
-      // Convert to StockData format for compatibility
-      const data = await stockService.getStockData(symbol);
-      setStockData(data);
-    } catch (error) {
-      console.error('Failed to load stock data:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Failed to load stock data';
-      toast.error('Stock Data Error', { description: errorMessage });
-      setStockData(null);
-      setLivePriceData(null);
-      setStockInfoData(null);
-    } finally {
-      setLoading(prev => ({ ...prev, stock: false }));
-    }
-  };
 
   const loadChartData = async (symbol: string, period: 'year' | '5year') => {
     setLoading(prev => ({ ...prev, chart: true }));
@@ -102,6 +72,10 @@ export default function App() {
       const data = await stockService.getHistoricalData(symbol, period);
       setChartData(data);
     } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        console.log('Chart data load aborted');
+        return;
+      }
       console.error('Failed to load chart data:', error);
       const errorMessage = error instanceof Error ? error.message : 'Failed to load chart data';
       toast.error('Chart Data Error', { description: errorMessage });
@@ -130,6 +104,10 @@ export default function App() {
       }
       setPrediction(data);
     } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        console.log('Prediction load aborted');
+        return;
+      }
       console.error('Failed to load prediction:', error);
       const errorMessage = error instanceof Error ? error.message : 'Failed to generate prediction';
       toast.error('Prediction Error', { description: errorMessage });
@@ -173,6 +151,10 @@ export default function App() {
         toast.error('Prediction Error', { description: 'No live price available for prediction' });
       }
     } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        console.log('Stock data load aborted');
+        return;
+      }
       console.error('Failed to load stock data:', error);
       const errorMessage = error instanceof Error ? error.message : 'Failed to load stock data';
       toast.error('Stock Data Error', { description: errorMessage });
@@ -188,6 +170,10 @@ export default function App() {
   const handleStockSelect = (symbol: string) => {
     stockService.cancelActiveRequests(); // Cancel any inflight requests!
     setSelectedSymbol(symbol);
+    setStockData(null);
+    setLivePriceData(null);
+    setStockInfoData(null);
+    setPrediction(null);
   };
 
   const handlePeriodChange = (period: 'year' | '5year') => {

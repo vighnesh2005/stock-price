@@ -267,9 +267,19 @@ class AutoencoderModel(ModelInterface):
         from tensorflow.keras.models import load_model
         
         try:
-            # Load autoencoder and encoder (compile=False to avoid metric deserialization issues)
-            self.autoencoder = load_model(f"{path}_autoencoder.keras", compile=False)
-            self.encoder = load_model(f"{path}_encoder.keras", compile=False)
+            # Support both new .keras and legacy .h5 formats
+            import os
+            keras_path = f"{path}_autoencoder.keras"
+            h5_path = f"{path}_autoencoder.h5"
+            
+            if os.path.exists(keras_path):
+                self.autoencoder = load_model(keras_path, compile=False)
+                self.encoder = load_model(f"{path}_encoder.keras", compile=False)
+            elif os.path.exists(h5_path):
+                self.autoencoder = load_model(h5_path, compile=False)
+                self.encoder = load_model(f"{path}_encoder.h5", compile=False)
+            else:
+                raise FileNotFoundError(f"Could not find model file at {keras_path} or {h5_path}")
             
             # Load metadata
             metadata = joblib.load(f"{path}_metadata.pkl")
